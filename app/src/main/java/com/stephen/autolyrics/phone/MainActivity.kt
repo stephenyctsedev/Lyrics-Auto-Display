@@ -13,6 +13,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.stephen.autolyrics.AppGraph
 import com.stephen.autolyrics.media.ActiveMediaWatcher
@@ -54,8 +56,10 @@ private fun HomeScreen(
     var granted by remember { mutableStateOf(isListenerEnabled()) }
     val nowPlaying by ActiveMediaWatcher.state.collectAsStateWithLifecycle()
 
-    // 由設定返嚟嗰陣重新檢查
-    LaunchedEffect(Unit) { granted = isListenerEnabled() }
+    // 每次 ON_RESUME 都重新檢查 —— 用家由設定畫面撳「返回」嗰陣，Activity 通常
+    // 只會 onPause → onResume（唔會 recreate），單次 LaunchedEffect(Unit) 唔會再執行，
+    // 會令 granted 停留喺舊值，睇落好似個權限成功咗都仲叫緊你開。
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { granted = isListenerEnabled() }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
 

@@ -17,7 +17,7 @@ object AppGraph {
 
     // UA 寫真實資料：app 名 + 版本 + 本 repo。LRCLIB 要求 UA 可識別。
     private const val USER_AGENT =
-        "AutoLyrics/${BuildConfig.VERSION_NAME} (https://github.com/stephenyctsedev/auto-lyrics)"
+        "AutoLyrics/${BuildConfig.VERSION_NAME} (https://github.com/stephenyctsedev/Lyrics-Auto-Display)"
 
     private val httpClient by lazy {
         OkHttpClient.Builder()
