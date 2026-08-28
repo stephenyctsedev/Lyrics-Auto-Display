@@ -82,6 +82,11 @@ dependencies {
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.okhttp.mockwebserver)
     testImplementation(libs.robolectric)
+    // Real org.json impl for plain-JVM unit tests: the Android SDK's org.json classes
+    // in android.jar are stubs that throw unless mocked/Robolectric's runner is active.
+    // This jar has the same package/class names, so LrclibSource's org.json.JSONObject
+    // usage works unchanged both on-device (platform classes win at runtime) and in tests.
+    testImplementation(libs.org.json)
 
     androidTestImplementation(libs.androidx.test.junit)
     androidTestImplementation(libs.androidx.test.runner)
