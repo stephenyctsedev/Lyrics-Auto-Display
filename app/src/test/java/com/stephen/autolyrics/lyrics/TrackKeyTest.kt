@@ -63,4 +63,29 @@ class TrackKeyTest {
             TrackKey("song name", "artist").cacheKey(),
         )
     }
+
+    @Test
+    fun `does not strip bracketed word that merely contains a noise word as a substring`() {
+        // "Alive" contains "live" but is not the noise word "live"
+        assertEquals("song name (alive)", norm("Song Name (Alive)"))
+    }
+
+    @Test
+    fun `does not strip bracketed word that contains mono as a substring`() {
+        // "Monochrome" contains "mono" but is not the noise word "mono"
+        assertEquals("song name (monochrome)", norm("Song Name (Monochrome)"))
+    }
+
+    @Test
+    fun `does not strip dash tail that merely contains a noise word as a substring`() {
+        // "Alive and Well" contains "live" but is not the noise word "live"
+        assertEquals("song name - alive and well", norm("Song Name - Alive and Well"))
+    }
+
+    @Test
+    fun `cacheKey does not collide when separator character appears inside fields`() {
+        val a = TrackKey(title = "c", artist = "a|b").cacheKey()
+        val b = TrackKey(title = "b|c", artist = "a").cacheKey()
+        assertEquals(false, a == b)
+    }
 }
