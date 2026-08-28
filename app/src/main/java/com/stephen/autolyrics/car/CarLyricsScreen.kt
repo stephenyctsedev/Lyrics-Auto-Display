@@ -81,8 +81,8 @@ class CarLyricsScreen(carContext: CarContext) : Screen(carContext), DefaultLifec
         lookupJob = lifecycleScope.launch {
             val result = AppGraph.repository(carContext)
                 .lookup(TrackKey(state.title, state.artist))
-            // 查完之後首歌可能已經換咗
-            if (state.title != nowPlaying?.title) return@launch
+            // 查完之後首歌可能已經換咗 —— 要同時比對歌手，因為唔同歌手可以有同名歌
+            if (state.title != nowPlaying?.title || state.artist != nowPlaying?.artist) return@launch
             lyrics = (result as? LyricsResult.Found)?.lyrics
             currentLine = null
             invalidate()
@@ -122,7 +122,11 @@ class CarLyricsScreen(carContext: CarContext) : Screen(carContext), DefaultLifec
             .build()
     }
 
-    /** 當前句 + 前一句 + 後兩句。 */
+    /**
+     * 一般情況：前一句 + 當前句 + 後兩句（共 4 行）。
+     * 首句附近（currentLine 為 0 或 null）冇「前一句」可以顯示，
+     * 窗口會夾到 0 開始，變成當前句 + 後三句。
+     */
     private fun visibleWindow(parsed: ParsedLyrics): List<Pair<Int, String>> {
         val lines = parsed.lines
         val current = currentLine ?: 0
