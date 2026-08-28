@@ -60,7 +60,7 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     kotlinOptions { jvmTarget = "17" }
-    buildFeatures { compose = true }
+    buildFeatures { compose = true; buildConfig = true }
     testOptions { unitTests.isIncludeAndroidResources = true }
 }
 
@@ -73,6 +73,7 @@ dependencies {
     implementation(libs.okhttp)
     implementation(libs.lifecycle.runtime.ktx)
     implementation(libs.lifecycle.service)
+    implementation(libs.lifecycle.runtime.compose)
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.material3)
     implementation(libs.compose.ui.tooling.preview)
