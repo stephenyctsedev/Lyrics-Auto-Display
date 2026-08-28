@@ -11,6 +11,19 @@
         android:usesCleartextTraffic="false"
         android:supportsRtl="true">
 
+        <meta-data
+            android:name="com.google.android.gms.car.application"
+            android:value="@xml/automotive_app_desc" />
+
+        <service
+            android:name=".car.LyricsCarAppService"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="androidx.car.app.CarAppService" />
+                <category android:name="androidx.car.app.category.POI" />
+            </intent-filter>
+        </service>
+
         <service
             android:name=".media.NotificationMediaWatcher"
             android:exported="true"
