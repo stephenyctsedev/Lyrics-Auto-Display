@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- 只有兩個權限。刻意唔要 MEDIA_CONTENT_CONTROL（signature-level，普通 app 攞唔到）、
+         RECEIVE_BOOT_COMPLETED（系統會自動拉返 NotificationListenerService）、RECORD_AUDIO。 -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <application
+        android:allowBackup="false"
+        android:label="Auto Lyrics"
+        android:usesCleartextTraffic="false"
+        android:supportsRtl="true">
+    </application>
+</manifest>
