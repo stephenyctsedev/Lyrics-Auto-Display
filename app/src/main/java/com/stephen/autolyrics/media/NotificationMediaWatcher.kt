@@ -42,6 +42,9 @@ class NotificationMediaWatcher : NotificationListenerService() {
 
     override fun onListenerConnected() {
         super.onListenerConnected()
+        // 防禦性：如果冇經過 onListenerDisconnected 就再次 connected（部分 OEM ROM 會咁），
+        // 就要先喺舊 manager 度取消註冊 sessionsListener，唔係就會重複註冊同洩漏。
+        sessionManager?.removeOnActiveSessionsChangedListener(sessionsListener)
         val component = ComponentName(this, NotificationMediaWatcher::class.java)
         sessionManager =
             (getSystemService(MEDIA_SESSION_SERVICE) as MediaSessionManager).also { manager ->
