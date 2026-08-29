@@ -152,8 +152,14 @@ sha256sum -c app-release.apk.sha256
 Release key SHA-256 fingerprint：
 
 ```
-<第一次生成 keystore 之後，用下面條命令攞返嚟填落嚟>
-keytool -list -v -keystore ~/.android/keystores/autolyrics-release.jks -alias autolyrics | grep SHA256
+46:24:28:11:4F:FB:13:DF:E7:5D:1D:96:A5:04:95:1D:37:1C:0E:0C:F2:33:43:AC:22:FA:27:5A:BB:96:25:55
+```
+
+自己核對（注意：**唔好**加 `| grep`／`>` 重導向，否則 keytool 攞唔到 console，
+密碼會明文顯示喺畫面）：
+
+```bash
+keytool -list -v -keystore ~/.android/keystores/autolyrics-release.jks -alias autolyrics
 ```
 
 ---
