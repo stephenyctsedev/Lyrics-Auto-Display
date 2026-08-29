@@ -1,0 +1,92 @@
+name: release
+
+on:
+  push:
+    tags: ['v*']
+
+# 預設乜都唔畀；下面個 job 先開佢實際需要嘅權限。
+permissions: {}
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write        # 發佈 release 要
+      id-token: write        # attestation 要
+      attestations: write    # attestation 要
+    steps:
+      # actions/checkout v4.2.2
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      # actions/setup-java v4.5.0
+      - uses: actions/setup-java@8df1039502a15bceb9433410b1a100fbe190c53b
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      # gradle/actions/wrapper-validation v4.2.1 —— 校驗 wrapper jar 冇被塞嘢
+      - uses: gradle/actions/wrapper-validation@cc4fc85e6b35bafd578d5ffbc76a5518407e1af0
+
+      # gradle/actions/setup-gradle v4.2.1
+      - uses: gradle/actions/setup-gradle@cc4fc85e6b35bafd578d5ffbc76a5518407e1af0
+        with:
+          # tag build 唔應該寫 cache —— 避免被之前嘅 PR build 污染
+          cache-read-only: true
+
+      - name: Run unit tests
+        run: ./gradlew test --no-daemon
+
+      - name: Decode keystore
+        env:
+          KEYSTORE_B64: ${{ secrets.SIGNING_KEYSTORE_B64 }}
+        run: |
+          if [ -z "$KEYSTORE_B64" ]; then
+            echo "SIGNING_KEYSTORE_B64 secret is not set — refusing to build an unsigned release."
+            exit 1
+          fi
+          mkdir -p "$RUNNER_TEMP/signing"
+          echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/signing/release.jks"
+
+      - name: Build signed release APK
+        env:
+          SIGNING_STORE_FILE: ${{ runner.temp }}/signing/release.jks
+          SIGNING_STORE_PASSWORD: ${{ secrets.SIGNING_STORE_PASSWORD }}
+          SIGNING_KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
+          SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
+        run: ./gradlew assembleRelease --no-daemon
+
+      # 呢步係最後一道防線：如果 signing config 冇生效，Gradle 會出
+      # app-release-unsigned.apk 而唔係 app-release.apk，下面就會 fail，
+      # 唔會靜靜地派一個未簽（或者用錯 key 簽）嘅 APK 出去。
+      - name: Verify the APK is signed with the release key
+        run: |
+          APK=app/build/outputs/apk/release/app-release.apk
+          if [ ! -f "$APK" ]; then
+            echo "Expected $APK but it does not exist."
+            echo "Signing config did not apply — refusing to publish. Found instead:"
+            ls -la app/build/outputs/apk/release/
+            exit 1
+          fi
+          "$ANDROID_HOME"/build-tools/35.0.0/apksigner verify --print-certs "$APK"
+
+      - name: Generate checksum
+        run: |
+          cd app/build/outputs/apk/release
+          sha256sum app-release.apk > app-release.apk.sha256
+          cat app-release.apk.sha256
+
+      # actions/attest-build-provenance v2.1.0
+      - uses: actions/attest-build-provenance@7668571508540a607bdfd90a87a560489fe372eb
+        with:
+          subject-path: app/build/outputs/apk/release/app-release.apk
+
+      # softprops/action-gh-release v2.2.1
+      - uses: softprops/action-gh-release@c95fe1489396fe8a9eb87c0abf8aa5b2ef267fda
+        with:
+          files: |
+            app/build/outputs/apk/release/app-release.apk
+            app/build/outputs/apk/release/app-release.apk.sha256
+
+      - name: Remove keystore
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/signing"
