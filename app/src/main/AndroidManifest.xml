@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- 只有兩個權限。刻意唔要 MEDIA_CONTENT_CONTROL（signature-level，普通 app 攞唔到）、
+         RECEIVE_BOOT_COMPLETED（系統會自動拉返 NotificationListenerService）、RECORD_AUDIO。 -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <application
+        android:allowBackup="false"
+        android:label="Auto Lyrics"
+        android:usesCleartextTraffic="false"
+        android:supportsRtl="true">
+
+        <meta-data
+            android:name="com.google.android.gms.car.application"
+            android:value="@xml/automotive_app_desc" />
+
+        <service
+            android:name=".car.LyricsCarAppService"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="androidx.car.app.CarAppService" />
+                <category android:name="androidx.car.app.category.POI" />
+            </intent-filter>
+        </service>
+
+        <service
+            android:name=".media.NotificationMediaWatcher"
+            android:exported="true"
+            android:label="Auto Lyrics"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
+
+        <activity
+            android:name=".phone.MainActivity"
+            android:exported="true"
+            android:label="Auto Lyrics">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>
