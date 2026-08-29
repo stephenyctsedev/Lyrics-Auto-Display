@@ -24,7 +24,7 @@ class LyricsRepository(
         val normalized = key.normalized()
         val cacheKey = key.cacheKey()
 
-        val result = resolve(normalized, cacheKey)
+        val result = resolve(normalized, key, cacheKey)
 
         log.record(
             QueryLogEntry(
@@ -43,7 +43,11 @@ class LyricsRepository(
         return result
     }
 
-    private suspend fun resolve(normalized: TrackKey, cacheKey: String): LyricsResult {
+    private suspend fun resolve(
+        normalized: TrackKey,
+        original: TrackKey,
+        cacheKey: String,
+    ): LyricsResult {
         // 1. Memory
         memory[cacheKey]?.let { cached ->
             return when (cached) {
@@ -67,8 +71,25 @@ class LyricsRepository(
             }
         }
 
-        // 3. Network
-        return when (val fresh = networkSource.lookup(normalized)) {
+        // 3. Network —— 正規化後嘅名查唔到，就用原名再試一次。
+        // 正規化係 heuristic：真名本身含「live」「mono」呢類字眼嘅歌會被切錯，
+        // 冇呢個 fallback 就會白白 negative cache 七日。只有明確 NotFound 先重試，
+        // Error（503／timeout）唔重試 —— 交返畀外層唔寫 cache，下次自然再嚟。
+        // 用 collapse（淨係統一大細階／空白）做基準去比，先知道正規化係咪真係「切走咗嘢」。
+        // 直接同原名比會錯：normalized 一定係細階，所以 "Song Name" 同 "song name"
+        // raw string 唔同，但其實乜都冇切走過，重試純屬浪費。
+        val collapsedOriginal = original.title.trim().replace(WHITESPACE, " ").lowercase()
+        val strippedSomething = collapsedOriginal != normalized.title
+
+        val firstTry = networkSource.lookup(normalized)
+        val fresh = if (firstTry is LyricsResult.NotFound && strippedSomething) {
+            // 用返「只 collapse、冇切後綴」嘅名重試，唔係用未處理嘅 raw title。
+            networkSource.lookup(TrackKey(collapsedOriginal, normalized.artist))
+        } else {
+            firstTry
+        }
+
+        return when (fresh) {
             is LyricsResult.Found -> {
                 dao.put(LyricsEntity(cacheKey, rawOf(fresh), nowMs()))
                 memory[cacheKey] = fresh
@@ -96,5 +117,6 @@ class LyricsRepository(
 
     private companion object {
         const val NEGATIVE_TTL_MS = 7L * 24 * 60 * 60 * 1000  // 7 日
+        val WHITESPACE = Regex("\\s+")
     }
 }

@@ -152,18 +152,14 @@ class LyricsRepositoryTest {
 
     @Test
     fun `queries with the normalized title`() = runBlocking {
-        val source = object : LyricsSource {
-            var seen: TrackKey? = null
-            override suspend fun lookup(key: TrackKey): LyricsResult {
-                seen = key
-                return LyricsResult.NotFound
-            }
-        }
+        // 記低每一次 query：搵唔到嗰陣會有第二次（原名 fallback），
+        // 但呢個 test 關心嘅係「第一次一定要用正規化後嘅名」。
+        val source = RecordingSource(mutableListOf(LyricsResult.NotFound))
         val r = LyricsRepository(FakeDao(), source, QueryLog(), nowMs = { 100_000 })
 
         r.lookup(TrackKey("Song Name (Remastered 2011)", "Artist"))
 
-        assertEquals("song name", source.seen?.title)
+        assertEquals("song name", source.seen.first().title)
     }
 
     @Test
@@ -188,5 +184,59 @@ class LyricsRepositoryTest {
 
         assertEquals(3, log.entries.size)
         assertEquals("Song 4", log.entries.first().title)  // 最新排頭
+    }
+
+    /** 記低每次收到嘅 query，用嚟驗證 fallback 真係用返原名再試。 */
+    private class RecordingSource(
+        private val results: MutableList<LyricsResult>,
+    ) : LyricsSource {
+        val seen = mutableListOf<TrackKey>()
+        override suspend fun lookup(key: TrackKey): LyricsResult {
+            seen += key
+            return if (results.isEmpty()) LyricsResult.NotFound else results.removeAt(0)
+        }
+    }
+
+    @Test
+    fun `retries with the original title when the normalized query misses`() = runBlocking {
+        // 「(Live)」係真後綴嘅寫法，正規化一定會切走。假設呢首歌喺 LRCLIB 入面
+        // 就係連後綴一齊收錄，切走之後反而搵唔到 —— 呢個時候要用全名再試一次。
+        val source = RecordingSource(
+            mutableListOf(LyricsResult.NotFound, foundResult)
+        )
+        val dao = FakeDao()
+        val r = LyricsRepository(dao, source, QueryLog(), nowMs = { 100_000 })
+
+        val result = r.lookup(TrackKey("Song Name (Live)", "Artist"))
+
+        assertTrue(result is LyricsResult.Found)
+        assertEquals(2, source.seen.size)
+        assertEquals("song name", source.seen[0].title)         // 正規化後（切走咗後綴）
+        assertEquals("song name (live)", source.seen[1].title)  // fallback：冇切後綴嘅全名
+    }
+
+    @Test
+    fun `does not retry when the normalized title is unchanged`() = runBlocking {
+        val source = RecordingSource(mutableListOf(LyricsResult.NotFound))
+        val r = LyricsRepository(FakeDao(), source, QueryLog(), nowMs = { 100_000 })
+
+        r.lookup(TrackKey("Song Name", "Artist"))
+
+        // 正規化冇改到個名，再查一次係浪費
+        assertEquals(1, source.seen.size)
+    }
+
+    @Test
+    fun `does not retry the original title on a transient error`() = runBlocking {
+        // 503 / timeout 唔係「搵唔到」，重試第二個 query 冇意義
+        val source = RecordingSource(mutableListOf(LyricsResult.Error("HTTP 503")))
+        val dao = FakeDao()
+        val r = LyricsRepository(dao, source, QueryLog(), nowMs = { 100_000 })
+
+        val result = r.lookup(TrackKey("Song Name (Remastered 2011)", "Artist"))
+
+        assertTrue(result is LyricsResult.Error)
+        assertEquals(1, source.seen.size)
+        assertTrue(dao.rows.isEmpty())  // 仍然唔可以寫 negative cache
     }
 }
