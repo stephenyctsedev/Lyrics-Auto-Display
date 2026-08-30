@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Adaptive icon foreground：一個音符 + 底下三條représent歌詞嘅線。
+     用 vector 而唔用 PNG，唔使維護五個 density 嘅圖檔。
+     Adaptive icon 規定 108x108dp 入面得中間 72x72dp 保證唔會被 mask 切走，
+     所以啲圖形都放喺 18..90 呢個範圍。 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- 音符：符頭 + 符桿 + 符旗 -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M62,26 L62,58 A9,7 0 1,1 55,51.5 L55,34 L44,37 L44,64 A9,7 0 1,1 37,57.5 L37,31 Z" />
+
+    <!-- 三條歌詞線，長短唔同 -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:fillAlpha="0.75"
+        android:pathData="M26,76 h56 v4.5 h-56 z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:fillAlpha="0.45"
+        android:pathData="M26,85 h40 v4.5 h-40 z" />
+</vector>

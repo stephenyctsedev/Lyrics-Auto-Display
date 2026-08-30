@@ -35,3 +35,12 @@ jobs:
 
       - name: Assemble debug
         run: ./gradlew assembleDebug --no-daemon
+
+      # 側載測試用。debug build 嘅 host validator 行 ALLOW_ALL_HOSTS_VALIDATOR，
+      # 所以 Android Auto 連得上；release build 用 sample allowlist，側載未必得。
+      # actions/upload-artifact v4.4.3
+      - uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882
+        with:
+          name: app-debug
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- API 23-25 fallback：呢啲版本唔識 <adaptive-icon>，所以砌一個普通 layer-list，
+     自己畫背景色再疊個音符上去。API 26+ 會用 mipmap-anydpi-v26 嗰個 adaptive 版本。 -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@color/ic_launcher_background" />
+    <item android:drawable="@drawable/ic_launcher_foreground" />
+</layer-list>

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Adaptive icon 背景：深藍。車機同手機 launcher 都係深色底多，
+         深藍比純黑易分辨得出係邊個 app。 -->
+    <color name="ic_launcher_background">#1B2A4A</color>
+</resources>

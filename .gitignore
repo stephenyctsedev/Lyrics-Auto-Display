@@ -9,3 +9,5 @@ app/build/
 *.iml
 .DS_Store
 captures/
+hs_err_pid*.log
+replay_pid*.log

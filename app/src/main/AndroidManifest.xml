@@ -7,7 +7,9 @@
 
     <application
         android:allowBackup="false"
-        android:label="Auto Lyrics"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:label="@string/app_name"
         android:usesCleartextTraffic="false"
         android:supportsRtl="true">
 
@@ -20,14 +22,17 @@
             android:exported="true">
             <intent-filter>
                 <action android:name="androidx.car.app.CarAppService" />
-                <category android:name="androidx.car.app.category.POI" />
+                <!-- MEDIA：呢個 app 跟住播放中嘅歌行，屬於 media-adjacent。
+                     POI 係「搵地方」類（泊車、油站），Android Auto 對 POI 嘅
+                     surface 有額外限制，而且個 app 會被歸類到錯嘅 launcher 分組。 -->
+                <category android:name="androidx.car.app.category.MEDIA" />
             </intent-filter>
         </service>
 
         <service
             android:name=".media.NotificationMediaWatcher"
             android:exported="true"
-            android:label="Auto Lyrics"
+            android:label="@string/app_name"
             android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
             <intent-filter>
                 <action android:name="android.service.notification.NotificationListenerService" />
@@ -37,7 +42,7 @@
         <activity
             android:name=".phone.MainActivity"
             android:exported="true"
-            android:label="Auto Lyrics">
+            android:label="@string/app_name">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
