@@ -62,6 +62,21 @@ android {
     kotlinOptions { jvmTarget = "17" }
     buildFeatures { compose = true; buildConfig = true }
     testOptions { unitTests.isIncludeAndroidResources = true }
+
+    // APK 改名做 AutoLyrics-v<versionName>.apk，唔用預設嘅 app-release.apk。
+    // 用 versionName 而唔係 git tag：versionName 係唯一 source of truth，
+    // 咁就唔會出現「個檔名寫住 v0.1.2 但入面其實係 0.1.1」嘅情況。
+    //
+    // 注意：unsigned build 出嚟嘅檔名係 AutoLyrics-v<ver>-unsigned.apk，
+    // release.yml 個 verify step 就係靠搵唔到冇 -unsigned 嗰個嚟擋住派錯 APK。
+    applicationVariants.all {
+        val variant = this
+        variant.outputs.all {
+            val output = this as com.android.build.gradle.internal.api.BaseVariantOutputImpl
+            val suffix = if (output.outputFile.name.contains("-unsigned")) "-unsigned" else ""
+            output.outputFileName = "AutoLyrics-v${variant.versionName}${suffix}.apk"
+        }
+    }
 }
 
 dependencies {

@@ -123,7 +123,7 @@ Manifest 入面**只有一個** `<uses-permission>`（`INTERNET`）。通知存�
    ./gradlew assembleRelease
    ```
 
-冇配置 keystore 嘅話，`assembleRelease` 會出 `app-release-unsigned.apk` ——
+冇配置 keystore 嘅話，`assembleRelease` 會出 `AutoLyrics-v<版本>-unsigned.apk` ——
 **唔會**靜靜跌返用 debug key 簽。debug 同 release 用兩條唔同嘅 key。
 
 ### CI
@@ -145,8 +145,8 @@ Manifest 入面**只有一個** `<uses-permission>`（`INTERNET`）。通知存�
 ## 驗證你手上嘅 APK
 
 ```bash
-apksigner verify --print-certs app-release.apk
-sha256sum -c app-release.apk.sha256
+apksigner verify --print-certs AutoLyrics-v0.1.1.apk
+sha256sum -c AutoLyrics-v0.1.1.apk.sha256
 ```
 
 Release key SHA-256 fingerprint：

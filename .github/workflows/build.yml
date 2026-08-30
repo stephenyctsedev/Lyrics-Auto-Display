@@ -42,5 +42,7 @@ jobs:
       - uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882
         with:
           name: app-debug
-          path: app/build/outputs/apk/debug/app-debug.apk
+          # Gradle 而家出 AutoLyrics-v<versionName>.apk，所以用 glob，
+          # 唔使喺呢度再寫一次個版本號。
+          path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
