@@ -95,7 +95,15 @@ private fun HomeScreen(
 
         val entries = AppGraph.queryLog.entries
         if (entries.isEmpty()) {
-            Text("（未有查詢）", style = MaterialTheme.typography.bodySmall)
+            // 空白係正常狀態，唔係壞咗：歌詞查詢由 CarLyricsScreen 發起，
+            // 而佢只會喺 Android Auto session 入面 create。淨係開手機 app
+            // 係永遠唔會有紀錄，所以要明講，唔好淨係寫「未有查詢」。
+            Text(
+                "（未有查詢）\n" +
+                    "歌詞查詢只會喺連接 Android Auto 之後發生 —— " +
+                    "淨係開手機 app 唔會查。連咗車機播歌之後返嚟呢度，就會見到紀錄。",
+                style = MaterialTheme.typography.bodySmall,
+            )
         } else {
             LazyColumn {
                 items(entries) { entry ->
