@@ -22,10 +22,13 @@
             android:exported="true">
             <intent-filter>
                 <action android:name="androidx.car.app.CarAppService" />
-                <!-- MEDIA：呢個 app 跟住播放中嘅歌行，屬於 media-adjacent。
-                     POI 係「搵地方」類（泊車、油站），Android Auto 對 POI 嘅
-                     surface 有額外限制，而且個 app 會被歸類到錯嘅 launcher 分組。 -->
-                <category android:name="androidx.car.app.category.MEDIA" />
+                <!-- POI + res/xml/automotive_app_desc.xml 嘅 <uses name="template"/>
+                     必須夾。試過改做 MEDIA 但冇同步改 descriptor，兩邊矛盾，
+                     Android Auto 索性唔列出個 app。
+                     亦都唔行 MEDIA 呢條路：MEDIA app 要實作 MediaBrowserService
+                     （曲目瀏覽 + 播放控制），但呢個 app 唔播歌，佢淨係讀其他
+                     播放器嘅狀態嚟顯示歌詞，冇 library 可以 browse。 -->
+                <category android:name="androidx.car.app.category.POI" />
             </intent-filter>
         </service>
 
