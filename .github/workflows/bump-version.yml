@@ -1,0 +1,126 @@
+name: bump version
+
+# 手動觸發。改 app/build.gradle.kts 入面嘅 versionName / versionCode，commit
+# 落 main，就停 —— **唔會打 tag**。打 tag 係另一個決定（tag 會觸發 release
+# workflow 派一個公開 Release），留返確認咗 CI 綠燈同實機試過先自己打。
+on:
+  workflow_dispatch:
+    inputs:
+      part:
+        description: '邊個部分 +1（major = 0.2.0 → 1.0.0，minor → 0.3.0，patch → 0.2.1）'
+        required: true
+        type: choice
+        default: patch
+        options: [major, minor, patch]
+
+permissions:
+  contents: read
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # 要 push 個 bump commit
+    steps:
+      # actions/checkout v4.2.2
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Bump versionName and versionCode
+        id: bump
+        run: |
+          set -euo pipefail
+          F=app/build.gradle.kts
+
+          CUR_NAME=$(sed -n 's/.*versionName *= *"\([^"]*\)".*/\1/p' "$F" | head -1)
+          CUR_CODE=$(sed -n 's/.*versionCode *= *\([0-9][0-9]*\).*/\1/p' "$F" | head -1)
+          echo "current: $CUR_NAME (code $CUR_CODE)"
+
+          # versionName 一定要係 X.Y.Z —— 唔係就唔好靠估，直接停。
+          if ! echo "$CUR_NAME" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "versionName '$CUR_NAME' is not X.Y.Z; refusing to guess."
+            exit 1
+          fi
+          if [ -z "$CUR_CODE" ]; then
+            echo "Could not read versionCode."
+            exit 1
+          fi
+
+          MAJOR=${CUR_NAME%%.*}
+          REST=${CUR_NAME#*.}
+          MINOR=${REST%%.*}
+          PATCH=${REST#*.}
+
+          case "${{ inputs.part }}" in
+            major) MAJOR=$((MAJOR+1)); MINOR=0; PATCH=0 ;;
+            minor) MINOR=$((MINOR+1)); PATCH=0 ;;
+            patch) PATCH=$((PATCH+1)) ;;
+          esac
+
+          NEW_NAME="$MAJOR.$MINOR.$PATCH"
+          # versionCode 永遠 +1，同 versionName 冇關係 —— Android 淨係睇呢個
+          # 數字嚟決定係咪升級，倒退或者唔變都會裝唔到落已安裝嘅版本上面。
+          NEW_CODE=$((CUR_CODE+1))
+          echo "new:     $NEW_NAME (code $NEW_CODE)"
+
+          # 只改 defaultConfig 嗰兩行。用 0,/…/ 限定改第一個 match，
+          # 避免將來有其他地方出現同名字眼時一齊改埋。
+          sed -i "0,/versionCode = $CUR_CODE/s//versionCode = $NEW_CODE/" "$F"
+          sed -i "0,/versionName = \"$CUR_NAME\"/s//versionName = \"$NEW_NAME\"/" "$F"
+
+          # 改完即刻讀返出嚟核對，唔信 sed 一定改到。
+          GOT_NAME=$(sed -n 's/.*versionName *= *"\([^"]*\)".*/\1/p' "$F" | head -1)
+          GOT_CODE=$(sed -n 's/.*versionCode *= *\([0-9][0-9]*\).*/\1/p' "$F" | head -1)
+          if [ "$GOT_NAME" != "$NEW_NAME" ] || [ "$GOT_CODE" != "$NEW_CODE" ]; then
+            echo "Edit did not apply as expected: got $GOT_NAME / $GOT_CODE"
+            git diff -- "$F"
+            exit 1
+          fi
+
+          {
+            echo "new_name=$NEW_NAME"
+            echo "new_code=$NEW_CODE"
+            echo "old_name=$CUR_NAME"
+          } >> "$GITHUB_OUTPUT"
+
+      # 個 tag 一早存在就停手：release workflow 靠 tag 推 APK 檔名，
+      # 撞名嘅話之後打 tag 會出事，早響好過遲響。
+      - name: Refuse if the target tag already exists
+        run: |
+          set -euo pipefail
+          TAG="v${{ steps.bump.outputs.new_name }}"
+          if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
+            echo "Tag $TAG already exists on origin. Pick a different bump."
+            exit 1
+          fi
+          echo "$TAG is free."
+
+      - name: Commit and push
+        run: |
+          set -euo pipefail
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/build.gradle.kts
+          git commit -m "Bump to ${{ steps.bump.outputs.new_name }}" \
+                     -m "versionCode ${{ steps.bump.outputs.new_code }} so the APK installs as an upgrade over ${{ steps.bump.outputs.old_name }}.
+
+          Bumped by the bump-version workflow. No tag: tagging publishes a release, so it stays a separate deliberate step."
+          git push origin HEAD:main
+
+      - name: Summary
+        run: |
+          {
+            echo "### Bumped to \`${{ steps.bump.outputs.new_name }}\`"
+            echo ""
+            echo "| | |"
+            echo "|---|---|"
+            echo "| versionName | ${{ steps.bump.outputs.old_name }} → **${{ steps.bump.outputs.new_name }}** |"
+            echo "| versionCode | → **${{ steps.bump.outputs.new_code }}** |"
+            echo ""
+            echo "冇打 tag。想發版就自己行："
+            echo ""
+            echo '```'
+            echo "git pull"
+            echo "git tag -a v${{ steps.bump.outputs.new_name }} -m 'v${{ steps.bump.outputs.new_name }}'"
+            echo "git push origin v${{ steps.bump.outputs.new_name }}"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
