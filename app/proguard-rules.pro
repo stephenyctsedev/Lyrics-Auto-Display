@@ -13,9 +13,12 @@
 -keep class * extends androidx.room.RoomDatabase { *; }
 
 # 由系統綁定／反射建立嘅 component。
-# LyricsSession 特別重要：佢唔喺 manifest 入面，只係由 Car App Library
-# 經 CarAppService.onCreateSession() 建立，所以冇 manifest reference 幫 R8 keep 住。
 -keep class com.stephen.autolyrics.media.NotificationMediaWatcher { *; }
--keep class com.stephen.autolyrics.car.LyricsCarAppService { *; }
--keep class com.stephen.autolyrics.car.LyricsSession { *; }
--keep class com.stephen.autolyrics.car.CarLyricsScreen { *; }
+
+# Android Auto 入口。系統經 manifest 用名實例化，R8 嘅 reachability 分析
+# 睇唔到有人 call 佢 —— 冇呢條規則，release build 個 service 可能被 rename
+# 或者剝走，車機就 bind 唔到（debug build 唔 minify 所以睇唔出）。
+-keep class com.stephen.autolyrics.auto.LyricsBrowserService { *; }
+
+# 舊 template 路線嗰幾個 class 已經喺 manifest disable 咗，唔再需要 keep。
+# 想行返嗰條路嘅話記得連呢度一齊改返。
