@@ -21,6 +21,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write   # 要 push 個 bump commit
+    outputs:
+      sha: ${{ steps.pushed.outputs.sha }}
     steps:
       # actions/checkout v4.2.2
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -95,6 +97,7 @@ jobs:
           echo "$TAG is free."
 
       - name: Commit and push
+        id: pushed
         run: |
           set -euo pipefail
           git config user.name  "github-actions[bot]"
@@ -105,6 +108,7 @@ jobs:
 
           Bumped by the bump-version workflow. No tag: tagging publishes a release, so it stays a separate deliberate step."
           git push origin HEAD:main
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Summary
         run: |
@@ -124,3 +128,12 @@ jobs:
             echo "git push origin v${{ steps.bump.outputs.new_name }}"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+
+  # Bump 完要自己叫個 build，唔可以靠 push 觸發：用 GITHUB_TOKEN push 嘅 commit
+  # 唔會觸發任何 workflow（GitHub 防無限迴圈），咁就會得個新版本號但冇 APK。
+  build:
+    needs: bump
+    uses: ./.github/workflows/build.yml
+    with:
+      # 要明確指定，否則會 build 到 bump 之前嗰個 commit。
+      ref: ${{ needs.bump.outputs.sha }}

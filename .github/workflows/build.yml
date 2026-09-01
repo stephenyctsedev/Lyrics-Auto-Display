@@ -4,6 +4,16 @@ on:
   push:
     branches: [main]
   pull_request:
+  # 手動行一次
+  workflow_dispatch:
+  # 畀 bump-version 收工之後叫。要呢個係因為用 GITHUB_TOKEN push 出去嘅 commit
+  # 唔會觸發 workflow（GitHub 防無限迴圈），所以 bump 完個 build 唔會自己行。
+  workflow_call:
+    inputs:
+      ref:
+        description: '要 build 邊個 ref。留空 = 觸發今次 run 嗰個 commit。'
+        required: false
+        type: string
 
 # 預設收到最細；release job 喺 Task 12 另開一個 workflow 先開 contents: write
 permissions:
@@ -16,7 +26,11 @@ jobs:
       contents: read
     steps:
       # actions/checkout v4.2.2
+      # ref 留空就同平時一樣 checkout 觸發嗰個 commit；bump-version 叫嘅時候
+      # 會傳新 commit 入嚟，否則會 build 到 bump 之前嗰份 code。
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ inputs.ref || github.sha }}
 
       # actions/setup-java v4.5.0
       - uses: actions/setup-java@8df1039502a15bceb9433410b1a100fbe190c53b
