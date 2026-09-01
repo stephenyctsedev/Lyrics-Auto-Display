@@ -2,8 +2,11 @@
 
 喺 Android Auto 車機畫面顯示當前播放歌曲嘅同步歌詞，跟住播放位置逐句更新。
 
-自用 sideload app，唔會上 Google Play（Android Auto 對第三方 app 有 category 白名單，
-「歌詞顯示」唔屬於任何現有 category）。
+自用 sideload app，唔會上 Google Play。
+
+Android Auto 對第三方 template app 有 category 白名單，「歌詞顯示」唔屬於任何一個 ——
+POI + template 試過，個 app 根本唔會喺 Customize launcher 出現。所以由 v0.2.0 開始改行
+**MediaBrowserService**：media 係官方支援嘅類別，將歌詞當「可瀏覽嘅曲目清單」餵畀車機。
 
 ---
 
@@ -145,8 +148,8 @@ Manifest 入面**只有一個** `<uses-permission>`（`INTERNET`）。通知存�
 ## 驗證你手上嘅 APK
 
 ```bash
-apksigner verify --print-certs AutoLyrics-v0.1.1.apk
-sha256sum -c AutoLyrics-v0.1.1.apk.sha256
+apksigner verify --print-certs AutoLyrics-v0.2.0.apk
+sha256sum -c AutoLyrics-v0.2.0.apk.sha256
 ```
 
 Release key SHA-256 fingerprint：
@@ -173,7 +176,7 @@ LyricsRepository            memory → Room → LRCLIB
     ↓ ParsedLyrics
 LyricsSync (純函數：位置 → 第幾行)
     ↓
-CarLyricsScreen (Android Auto)  +  MainActivity (手機：權限引導 + 查詢紀錄)
+LyricsBrowserService (Android Auto)  +  MainActivity (手機：權限引導 + 查詢紀錄)
 ```
 
 `lyrics/` 同 `media/PositionEstimator.kt` 零 Android 依賴，所以喺普通 JVM test 就測得晒
@@ -194,8 +197,11 @@ CarLyricsScreen (Android Auto)  +  MainActivity (手機：權限引導 + 查詢�
 - **只支援有時間戳嘅歌詞。** LRCLIB 只有純文字歌詞嗰啲歌會當搵唔到處理 ——
   喺車機顯示一大段唔會郁嘅文字反而係視覺干擾。
 - **多個播放器同時開住**嘅時候，app 揀 active session 列表第一個，可能唔係你估嗰個。
-- **Android Auto 嘅 refresh throttling 未實測。** Code 已經做咗「行號冇變就唔重畫」
-  （快歌一句 2 秒即係每 2 秒先更新一次），但實際順唔順要用 Desktop Head Unit
-  或者真車機睇過先知。
+- **v0.2.0 個 MediaBrowserService 仲係骨架。** 車機會見到個 app 同一個
+  「連接成功」item，但**未接歌詞** —— 呢個版本係專登用嚟驗證個 app 到底喺唔喺
+  Customize launcher 出現，證實咗先接落去。
+- **Android Auto 嘅 refresh throttling 未實測。** 舊 template 版本做咗「行號冇變
+  就唔重畫」，MediaBrowserService 版本要重新用 notifyChildrenChanged() 做一次，
+  實際順唔順要用 Desktop Head Unit 或者真車機睇過先知。
 - 搵唔到歌詞 / 網絡唔通嗰陣，車機只顯示歌名同歌手，**唔會出 error 或者 retry 掣** ——
   行車時閃動嘅文字係安全問題，而且司機都做唔到啲咩。
