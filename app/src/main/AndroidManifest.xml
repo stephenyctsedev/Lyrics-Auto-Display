@@ -13,24 +13,32 @@
         android:usesCleartextTraffic="false"
         android:supportsRtl="true">
 
+        <!-- android:resource（唔係 android:value）—— value 會當佢係字串
+             "@xml/automotive_app_desc" 傳過去，唔會 resolve 成個 XML resource。 -->
         <meta-data
             android:name="com.google.android.gms.car.application"
-            android:value="@xml/automotive_app_desc" />
+            android:resource="@xml/automotive_app_desc" />
 
+        <!-- Android Auto 入口。descriptor 係 <uses name="media"/>，所以呢度要
+             MediaBrowserService；唔可以同時再聲明 CarAppService + template，
+             兩邊矛盾嘅話個 app 唔會喺 launcher 出現。 -->
         <service
-            android:name=".car.LyricsCarAppService"
-            android:exported="true">
+            android:name=".auto.LyricsBrowserService"
+            android:exported="true"
+            android:label="@string/app_name">
             <intent-filter>
-                <action android:name="androidx.car.app.CarAppService" />
-                <!-- POI + res/xml/automotive_app_desc.xml 嘅 <uses name="template"/>
-                     必須夾。試過改做 MEDIA 但冇同步改 descriptor，兩邊矛盾，
-                     Android Auto 索性唔列出個 app。
-                     亦都唔行 MEDIA 呢條路：MEDIA app 要實作 MediaBrowserService
-                     （曲目瀏覽 + 播放控制），但呢個 app 唔播歌，佢淨係讀其他
-                     播放器嘅狀態嚟顯示歌詞，冇 library 可以 browse。 -->
-                <category android:name="androidx.car.app.category.POI" />
+                <action android:name="android.media.browse.MediaBrowserService" />
             </intent-filter>
         </service>
+
+        <!-- 舊嘅 template 路線，留住做參考但唔再聲明畀 host。
+             POI + template 試過：icon 加齊、manifest 一致，個 app 一樣唔會喺
+             Customize launcher 出現 —— 「歌詞顯示」唔屬於任何 template category。
+             enabled=false 令佢唔會同上面個 MediaBrowserService 撞。 -->
+        <service
+            android:name=".car.LyricsCarAppService"
+            android:enabled="false"
+            android:exported="false" />
 
         <service
             android:name=".media.NotificationMediaWatcher"

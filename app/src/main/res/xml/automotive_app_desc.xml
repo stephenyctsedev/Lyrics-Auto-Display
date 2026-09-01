@@ -1,4 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- media，唔係 template。呢個檔案同 manifest 入面嘅 service 聲明必須夾：
+     "media" 對應 MediaBrowserService，"template" 對應 CarAppService + category。
+     兩邊唔夾嘅話 Android Auto 索性唔會列出個 app（試過，就係咁樣白撞咗幾日）。 -->
 <automotiveApp>
-    <uses name="template" />
+    <uses name="media" />
 </automotiveApp>
