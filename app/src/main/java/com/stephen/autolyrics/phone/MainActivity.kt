@@ -163,51 +163,54 @@ private fun CarLinkBadge(link: CarLink) {
 private fun LyricsPane(state: LyricsFeedState) {
     val playing = state.nowPlaying
 
+    // 冇 early return：@Composable 嘅 body 畀 compiler 加咗 group 開始／結束
+    // 標記，中途 return 會跳過 endReplaceableGroup()，令 slot table 錯位 ——
+    // 結果係同一個 scope 之後啲 composable 靜靜咁唔畫出嚟，而且唔掟 exception。
+    // 所以呢度一律用 if/else。
     if (playing == null) {
         Text("而家播緊", style = MaterialTheme.typography.titleMedium)
         Text(
             "（冇偵測到播放中嘅媒體）",
             style = MaterialTheme.typography.bodyMedium,
         )
-        return
-    }
-
-    Text(playing.title, style = MaterialTheme.typography.titleLarge)
-    Text(
-        playing.artist,
-        style = MaterialTheme.typography.bodyMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
-
-    Spacer(Modifier.height(16.dp))
-
-    val lyrics = state.lyrics
-    when {
-        state.loading -> Text("搵緊歌詞…", style = MaterialTheme.typography.bodyMedium)
-
-        lyrics == null || lyrics.isEmpty -> Text(
-            "搵唔到呢首歌嘅同步歌詞。",
+    } else {
+        Text(playing.title, style = MaterialTheme.typography.titleLarge)
+        Text(
+            playing.artist,
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
 
-        else -> {
-            // 手機夠位，顯示多啲上文下理 —— 當前行前後各幾句。
-            val current = state.currentLine ?: 0
-            val from = (current - 2).coerceAtLeast(0)
-            val to = (from + PHONE_WINDOW).coerceAtMost(lyrics.lines.size)
-            Column {
-                for (i in from until to) {
-                    val isCurrent = i == state.currentLine
-                    Text(
-                        lyrics.lines[i].text.ifBlank { "♪" },
-                        style = if (isCurrent) MaterialTheme.typography.titleMedium
-                                else MaterialTheme.typography.bodyMedium,
-                        fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal,
-                        color = if (isCurrent) MaterialTheme.colorScheme.primary
-                                else MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(vertical = 4.dp),
-                    )
+        Spacer(Modifier.height(16.dp))
+
+        val lyrics = state.lyrics
+        when {
+            state.loading -> Text("搵緊歌詞…", style = MaterialTheme.typography.bodyMedium)
+
+            lyrics == null || lyrics.isEmpty -> Text(
+                "搵唔到呢首歌嘅同步歌詞。",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
+            else -> {
+                // 手機夠位，顯示多啲上文下理 —— 當前行前後各幾句。
+                val current = state.currentLine ?: 0
+                val from = (current - 2).coerceAtLeast(0)
+                val to = (from + PHONE_WINDOW).coerceAtMost(lyrics.lines.size)
+                Column {
+                    for (i in from until to) {
+                        val isCurrent = i == state.currentLine
+                        Text(
+                            lyrics.lines[i].text.ifBlank { "♪" },
+                            style = if (isCurrent) MaterialTheme.typography.titleMedium
+                                    else MaterialTheme.typography.bodyMedium,
+                            fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal,
+                            color = if (isCurrent) MaterialTheme.colorScheme.primary
+                                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(vertical = 4.dp),
+                        )
+                    }
                 }
             }
         }
