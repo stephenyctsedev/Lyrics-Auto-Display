@@ -34,6 +34,10 @@ class LyricsBrowserService : MediaBrowserServiceCompat() {
     private lateinit var mediaSession: MediaSessionCompat
     private lateinit var feed: LyricsFeed
 
+    /** Host 喺 onGetRoot 講低嘅 root 層規格 —— 見嗰度嘅註釋。 */
+    private var rootChildrenLimit = WINDOW_SIZE
+    private var rootItemFlag = MediaBrowserCompat.MediaItem.FLAG_PLAYABLE
+
     override fun onCreate() {
         super.onCreate()
 
@@ -55,17 +59,12 @@ class LyricsBrowserService : MediaBrowserServiceCompat() {
         // state 一變就叫 host 重新拉 —— LyricsFeed 已經做咗節流
         // （行號冇變就唔會出新 state），所以呢度直接跟住行就得。
         //
-        // 兩個 root 都要 notify：主畫面個 rail 訂嘅係 SUGGESTED_ROOT_ID，
-        // 淨係 notify ROOT_ID 嘅話，入到 app 見到歌詞會郁，但 rail 上面
-        // 嗰幾行會定住唔變。
+        // 實測過 host 收到 notify 之後即刻會再 onLoadChildren 一次，
+        // 所以歌詞真係跟住郁，唔係一張定咗嘅快照。
         scope.launch {
             feed.state.collect { state ->
-                // 對住 onLoadChildren 個 log 睇：見到 notify 但之後冇
-                // onLoadChildren parent=suggested，即係 host 唔會為住個 rail
-                // 重新拉 —— 咁 rail 上面就係一張快照，唔會跟住歌郁。
                 Log.i(TAG, "notify line=${state.currentLine}")
                 notifyChildrenChanged(ROOT_ID)
-                notifyChildrenChanged(SUGGESTED_ROOT_ID)
             }
         }
     }
@@ -87,23 +86,34 @@ class LyricsBrowserService : MediaBrowserServiceCompat() {
         // 讀到你播緊咩同埋當前歌詞。回 null = 拒絕連接。
         if (!CallerValidator.isAllowed(this, clientPackageName, clientUid)) return null
 
-        // Android Auto 主畫面左邊個 rail 係揭得頁嘅，每頁攞一個 media app 嘅
-        // 「suggestion」。Host 攞呢啲內容嗰陣，會喺 rootHints 塞
-        // EXTRA_SUGGESTED=true，我哋就回一個唔同嘅 root ——
-        // 佢啲 children 就係鋪喺嗰格嘅卡。
+        // Host 喺 rootHints 講明佢想點畫 root 呢一層 —— 主畫面左邊個 rail
+        // 就係攞 root children 嚟鋪，唔係另外一個 "suggested" root。
+        // （實測過：Android Auto 由頭到尾都冇傳過 EXTRA_SUGGESTED。）
         //
-        // 唔理 rootHints 嘅話（之前就係咁）host 攞到嘅係普通 browse tree，
-        // 個 app 就唔會出現喺主畫面，一定要入 app 先睇到歌詞。
-        val suggested = rootHints?.getBoolean(BrowserRoot.EXTRA_SUGGESTED) == true
-        val rootId = if (suggested) SUGGESTED_ROOT_ID else ROOT_ID
+        //   KEY_ROOT_CHILDREN_LIMIT         最多收幾多個 item
+        //   KEY_ROOT_CHILDREN_SUPPORTED_FLAGS  收邊種 flag（1=BROWSABLE 2=PLAYABLE）
+        //
+        // 兩樣都要跟。出多過 limit 會畀 host 截走，而截嘅係尾嗰幾行 ——
+        // 當前歌詞就唔一定仲喺入面。
+        rootChildrenLimit = rootHints
+            ?.getInt(KEY_ROOT_CHILDREN_LIMIT, WINDOW_SIZE)
+            ?.takeIf { it > 0 }
+            ?: WINDOW_SIZE
 
-        // 主畫面 rail 冇嘢出嘅時候，呢行分辨到兩種完全唔同嘅失敗：
-        // 見唔到 suggested=true → host 根本冇問過，即係呢條路唔通；
-        // 見到 suggested=true 但畫面仍然空 → 佢問咗，係我哋答錯。
-        Log.i(TAG, "onGetRoot from=$clientPackageName suggested=$suggested " +
-            "root=$rootId hints=${rootHints.describe()}")
+        // Host 唔收 PLAYABLE 嘅話就要出 BROWSABLE，否則啲 item 會靜靜被丟走。
+        // 冇講就當兩種都收，照用 PLAYABLE。
+        val supportedFlags = rootHints?.getInt(KEY_ROOT_CHILDREN_SUPPORTED_FLAGS, 0) ?: 0
+        rootItemFlag = when {
+            supportedFlags == 0 -> MediaBrowserCompat.MediaItem.FLAG_PLAYABLE
+            supportedFlags and MediaBrowserCompat.MediaItem.FLAG_PLAYABLE != 0 ->
+                MediaBrowserCompat.MediaItem.FLAG_PLAYABLE
+            else -> MediaBrowserCompat.MediaItem.FLAG_BROWSABLE
+        }
 
-        return BrowserRoot(rootId, contentStyleExtras())
+        Log.i(TAG, "onGetRoot from=$clientPackageName limit=$rootChildrenLimit " +
+            "flag=$rootItemFlag hints=${rootHints.describe()}")
+
+        return BrowserRoot(ROOT_ID, contentStyleExtras())
     }
 
     /** Bundle 個預設 toString 淨係印個 object id，冇用，要自己攤開。 */
@@ -130,11 +140,7 @@ class LyricsBrowserService : MediaBrowserServiceCompat() {
         parentId: String,
         result: Result<MutableList<MediaBrowserCompat.MediaItem>>
     ) {
-        // 主畫面個 rail 淨係得幾行位，出多咗會畀 host 直接截走，
-        // 而且截嘅係尾嗰幾行 —— 當前歌詞就唔一定喺入面。
-        val window =
-            if (parentId == SUGGESTED_ROOT_ID) SUGGESTED_WINDOW_SIZE else WINDOW_SIZE
-
+        val window = rootChildrenLimit
         val items = mutableListOf<MediaBrowserCompat.MediaItem>()
         val state = feed.state.value
         val playing = state.nowPlaying
@@ -157,8 +163,7 @@ class LyricsBrowserService : MediaBrowserServiceCompat() {
             }
         }
 
-        Log.i(TAG, "onLoadChildren parent=$parentId → ${items.size} item(s)" +
-            (if (parentId == SUGGESTED_ROOT_ID) " [主畫面 rail]" else ""))
+        Log.i(TAG, "onLoadChildren parent=$parentId → ${items.size} item(s) flag=$rootItemFlag")
 
         result.sendResult(items)
     }
@@ -173,8 +178,9 @@ class LyricsBrowserService : MediaBrowserServiceCompat() {
             .setTitle(title)
             .apply { subtitle?.let { setSubtitle(it) } }
             .build()
-        // PLAYABLE 而唔係 BROWSABLE：歌詞行撳落去唔應該再展開一層。
-        return MediaBrowserCompat.MediaItem(desc, MediaBrowserCompat.MediaItem.FLAG_PLAYABLE)
+        // Flag 由 host 話事 —— Android Auto 主畫面嗰層淨係收 BROWSABLE，
+        // 用錯 flag 啲 item 唔會報錯，係靜靜唔見咗。
+        return MediaBrowserCompat.MediaItem(desc, rootItemFlag)
     }
 
     private companion object {
@@ -183,14 +189,17 @@ class LyricsBrowserService : MediaBrowserServiceCompat() {
 
         const val ROOT_ID = "root"
 
-        /** Host 攞主畫面 rail 內容嗰陣用嘅 root —— 見 onGetRoot()。 */
-        const val SUGGESTED_ROOT_ID = "suggested"
-
+        /** Host 冇講 limit 嗰陣先用 —— 實際上 Android Auto 一定會講。 */
         const val WINDOW_SIZE = 4
-        const val SUGGESTED_WINDOW_SIZE = 3
 
-        // Android Auto content style extras。androidx.media 冇 constant 出，
-        // 要自己寫死條 key。
+        // Host 喺 rootHints 用嘅 key。androidx.media 冇出 constant，
+        // 要自己寫死。
+        const val KEY_ROOT_CHILDREN_LIMIT =
+            "androidx.media.MediaBrowserCompat.Extras.KEY_ROOT_CHILDREN_LIMIT"
+        const val KEY_ROOT_CHILDREN_SUPPORTED_FLAGS =
+            "androidx.media.MediaBrowserCompat.Extras.KEY_ROOT_CHILDREN_SUPPORTED_FLAGS"
+
+        // Android Auto content style extras。同上，要自己寫死條 key。
         const val CONTENT_STYLE_SUPPORTED =
             "android.media.browse.CONTENT_STYLE_SUPPORTED"
         const val CONTENT_STYLE_PLAYABLE_HINT =
