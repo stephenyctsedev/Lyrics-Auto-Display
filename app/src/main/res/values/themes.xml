@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      冇呢個 theme 嘅話個 activity 會繼承平台預設 theme，佢會畫一條深色
+      title bar（顯示 app label），而且個 window background 同 Compose 用緊嘅
+      Material 色系唔夾 —— 結果係內容量到有正確位置同尺寸，但字畫咗出嚟同
+      背景撞色，睇落好似成版嘢消失咗。
+
+      NoActionBar：標題由 Compose 自己畫，唔要平台嗰條。
+    -->
+    <style name="Theme.AutoLyrics" parent="android:Theme.Material.Light.NoActionBar" />
+</resources>
