@@ -16,8 +16,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -105,12 +103,7 @@ private fun HomeScreen(
             .verticalScroll(rememberScrollState())
     ) {
 
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.onGloballyPositioned {
-                android.util.Log.i("ALPROBE", "header window pos=" + it.positionInWindow() + " size=" + it.size)
-            },
-        ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 "Auto Lyrics",
                 style = MaterialTheme.typography.headlineMedium,
