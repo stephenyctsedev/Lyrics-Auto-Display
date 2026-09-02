@@ -16,6 +16,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -93,14 +95,22 @@ private fun HomeScreen(
     // 會令 granted 停留喺舊值，睇落好似個權限成功咗都仲叫緊你開。
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { granted = isListenerEnabled() }
 
+    // 注意 modifier 次序：padding 要喺 verticalScroll 之前，唔係嘅話 padding
+    // 會加落 scroll viewport 出面，內容會偏移到可視範圍以外。
+    // fillMaxSize 亦都要喺最前，等個 Column 至少有成個窗口咁高。
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState())
             .padding(16.dp)
+            .verticalScroll(rememberScrollState())
     ) {
 
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.onGloballyPositioned {
+                android.util.Log.i("ALPROBE", "header window pos=" + it.positionInWindow() + " size=" + it.size)
+            },
+        ) {
             Text(
                 "Auto Lyrics",
                 style = MaterialTheme.typography.headlineMedium,
