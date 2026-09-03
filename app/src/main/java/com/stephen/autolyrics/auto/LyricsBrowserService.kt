@@ -34,9 +34,8 @@ class LyricsBrowserService : MediaBrowserServiceCompat() {
     private lateinit var mediaSession: MediaSessionCompat
     private lateinit var feed: LyricsFeed
 
-    /** Host 喺 onGetRoot 講低嘅 root 層規格 —— 見嗰度嘅註釋。 */
+    /** Host 喺 onGetRoot 講低最多收幾多行 —— 見嗰度嘅註釋。 */
     private var rootChildrenLimit = WINDOW_SIZE
-    private var rootItemFlag = MediaBrowserCompat.MediaItem.FLAG_PLAYABLE
 
     override fun onCreate() {
         super.onCreate()
@@ -86,32 +85,25 @@ class LyricsBrowserService : MediaBrowserServiceCompat() {
         // 讀到你播緊咩同埋當前歌詞。回 null = 拒絕連接。
         if (!CallerValidator.isAllowed(this, clientPackageName, clientUid)) return null
 
-        // Host 喺 rootHints 講明佢想點畫 root 呢一層 —— 主畫面左邊個 rail
-        // 就係攞 root children 嚟鋪，唔係另外一個 "suggested" root。
-        // （實測過：Android Auto 由頭到尾都冇傳過 EXTRA_SUGGESTED。）
-        //
-        //   KEY_ROOT_CHILDREN_LIMIT         最多收幾多個 item
-        //   KEY_ROOT_CHILDREN_SUPPORTED_FLAGS  收邊種 flag（1=BROWSABLE 2=PLAYABLE）
-        //
-        // 兩樣都要跟。出多過 limit 會畀 host 截走，而截嘅係尾嗰幾行 ——
-        // 當前歌詞就唔一定仲喺入面。
+        // Host 喺 rootHints 講低佢想點畫 root 呢一層。只跟 limit 一項：
+        // 出多過佢就會截走尾嗰幾行，而當前歌詞好可能就喺入面。
         rootChildrenLimit = rootHints
             ?.getInt(KEY_ROOT_CHILDREN_LIMIT, WINDOW_SIZE)
             ?.takeIf { it > 0 }
             ?: WINDOW_SIZE
 
-        // Host 唔收 PLAYABLE 嘅話就要出 BROWSABLE，否則啲 item 會靜靜被丟走。
-        // 冇講就當兩種都收，照用 PLAYABLE。
-        val supportedFlags = rootHints?.getInt(KEY_ROOT_CHILDREN_SUPPORTED_FLAGS, 0) ?: 0
-        rootItemFlag = when {
-            supportedFlags == 0 -> MediaBrowserCompat.MediaItem.FLAG_PLAYABLE
-            supportedFlags and MediaBrowserCompat.MediaItem.FLAG_PLAYABLE != 0 ->
-                MediaBrowserCompat.MediaItem.FLAG_PLAYABLE
-            else -> MediaBrowserCompat.MediaItem.FLAG_BROWSABLE
-        }
-
+        // ⚠️ 另一條 hint KEY_ROOT_CHILDREN_SUPPORTED_FLAGS 傳 1（BROWSABLE），
+        // 但實測過唔好跟：
+        //
+        //   跟咗出 BROWSABLE  → 歌詞照顯示，但每行右邊多咗個「入去下一層」
+        //                       箭嘴（歌詞根本冇下一層），而且 host 會為咗
+        //                       預先展開，逐行嚟問 children，一首歌 25 次。
+        //   照出 PLAYABLE    → 歌詞一樣顯示到，冇箭嘴，host 淨係問 root。
+        //
+        // 即係話嗰條 hint 講嘅係主畫面 rail 嗰層收咩，唔係話唔跟就會丟走。
+        // 兩個 build 都喺 DHU 上面行過先落呢個結論。
         Log.i(TAG, "onGetRoot from=$clientPackageName limit=$rootChildrenLimit " +
-            "flag=$rootItemFlag hints=${rootHints.describe()}")
+            "hints=${rootHints.describe()}")
 
         return BrowserRoot(ROOT_ID, contentStyleExtras())
     }
@@ -140,6 +132,15 @@ class LyricsBrowserService : MediaBrowserServiceCompat() {
         parentId: String,
         result: Result<MutableList<MediaBrowserCompat.MediaItem>>
     ) {
+        // 淨係 root 有內容。冇呢個 guard 嘅話，任何 parentId 都會攞到同一份
+        // 歌詞 —— 即係每一行入面又有四行，一棵無限深嘅樹。用 PLAYABLE 之後
+        // host 唔會再問，但佢問唔問係佢話事，唔應該靠佢自律。
+        if (parentId != ROOT_ID) {
+            Log.i(TAG, "onLoadChildren parent=$parentId → 冇下一層")
+            result.sendResult(mutableListOf())
+            return
+        }
+
         val window = rootChildrenLimit
         val items = mutableListOf<MediaBrowserCompat.MediaItem>()
         val state = feed.state.value
@@ -163,7 +164,7 @@ class LyricsBrowserService : MediaBrowserServiceCompat() {
             }
         }
 
-        Log.i(TAG, "onLoadChildren parent=$parentId → ${items.size} item(s) flag=$rootItemFlag")
+        Log.i(TAG, "onLoadChildren parent=$parentId → ${items.size} item(s)")
 
         result.sendResult(items)
     }
@@ -178,9 +179,9 @@ class LyricsBrowserService : MediaBrowserServiceCompat() {
             .setTitle(title)
             .apply { subtitle?.let { setSubtitle(it) } }
             .build()
-        // Flag 由 host 話事 —— Android Auto 主畫面嗰層淨係收 BROWSABLE，
-        // 用錯 flag 啲 item 唔會報錯，係靜靜唔見咗。
-        return MediaBrowserCompat.MediaItem(desc, rootItemFlag)
+        // PLAYABLE 而唔係 BROWSABLE：歌詞行冇下一層，唔應該有個箭嘴
+        // 引人撳入去。詳細見 onGetRoot() 嗰段實測記錄。
+        return MediaBrowserCompat.MediaItem(desc, MediaBrowserCompat.MediaItem.FLAG_PLAYABLE)
     }
 
     private companion object {
@@ -196,8 +197,6 @@ class LyricsBrowserService : MediaBrowserServiceCompat() {
         // 要自己寫死。
         const val KEY_ROOT_CHILDREN_LIMIT =
             "androidx.media.MediaBrowserCompat.Extras.KEY_ROOT_CHILDREN_LIMIT"
-        const val KEY_ROOT_CHILDREN_SUPPORTED_FLAGS =
-            "androidx.media.MediaBrowserCompat.Extras.KEY_ROOT_CHILDREN_SUPPORTED_FLAGS"
 
         // Android Auto content style extras。同上，要自己寫死條 key。
         const val CONTENT_STYLE_SUPPORTED =
