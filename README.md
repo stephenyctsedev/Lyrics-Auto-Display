@@ -148,6 +148,37 @@ Manifest 入面**只有一個** `<uses-permission>`（`INTERNET`）。通知存�
 
 ---
 
+## 喺車機度試（DHU）
+
+冇實體車機都試到 —— Desktop Head Unit 喺電腦扮個車機屏幕，接住真手機行。
+**要一部真手機**，模擬器係試唔到嘅（Play Store 唔畀喺模擬器裝 Android Auto，
+預載嗰個係 stub）。
+
+```powershell
+# 淨係接 DHU
+.\scripts\connect-dhu.ps1
+
+# 裝個新 build、開埋 log window、再接
+.\scripts\connect-dhu.ps1 -Install .\AutoLyrics-v0.2.3.apk -Logcat
+```
+
+一次性準備：SDK Manager 裝 **Android Auto Desktop Head Unit Emulator**，
+手機 Android Auto 入面撳「版本」十下開開發者模式。
+
+個 script 幫你處理咗幾個唔會報錯、但會靜靜整死你嘅位：
+
+| 坑 | 點解會中 |
+|---|---|
+| 改 USB 模式之後 port forward 冇咗 | 改模式會令 adb 重連，forward 靜靜被殺 —— 所以要確認咗模式先開 forward |
+| DHU 一開即閂 | 掟落 background 行嘅話，佢印完 `connected.` 就退出，一定要自己一個 window |
+| App 明明行緊但一句 log 都冇 | Samsung 預設收埋第三方 app 個 logcat，要 `setprop log.tag.…` 再重開個 app |
+| `adb install -r` 話簽名唔夾 | CI 每次 build 都係新 runner，即係新 debug keystore，一定要先 uninstall |
+| 裝完冇歌詞 | uninstall 會清走通知權限，而 adb **寫唔返**（Samsung 唔認 `settings put`），要落手機撳 |
+
+接通之後：播首歌 → DHU 撳音樂 icon → Auto Lyrics。
+
+---
+
 ## 驗證你手上嘅 APK
 
 ```bash
