@@ -212,14 +212,23 @@ LyricsSync (純函數：位置 → 第幾行)
     ↓
 LyricsFeed                  查詢 + 250ms tick 推算位置；行號變咗先出新 state
     ↓ StateFlow<LyricsFeedState>
-LyricsBrowserService (車機)  +  MainActivity (手機)
+BrowseRows (純函數：state → 車機幾行)  +  MainActivity (手機)
+    ↓
+LyricsBrowserService (車機)
 ```
 
 手機同車機**共用同一個 `LyricsFeed`**，所以手機見到咩，車機就顯示咩 ——
 喺手機度就驗證到大部分嘢，唔使次次接車。
 
-`lyrics/` 同 `media/PositionEstimator.kt` 零 Android 依賴，所以喺普通 JVM test 就測得晒
-（66 個 unit test），唔使開模擬器。Room DAO 另外有 5 個 instrumented test。
+`lyrics/`、`auto/BrowseRows.kt` 同 `media/PositionEstimator.kt` 零 Android 依賴，所以喺
+普通 JVM test 就測得晒（80 個 unit test），唔使開模擬器。Room DAO 另外有 5 個
+instrumented test。
+
+**車機一屏出咩：** 第一行係歌曲資訊（歌名 + 歌手），跟住前一句、當前句（`▶`）、
+之後幾句，總共 7 行。行嘅次序係按重要性排 —— 就算 host 由尾截短，剩低嘅一定
+仲有當前句。Host 喺 `rootHints` 報嘅 `KEY_ROOT_CHILDREN_LIMIT` 當**下限唔當上限**：
+實機試過跟足佢報嘅數目出，畫面下面吊住一大片空白，即係嗰條 limit 講嘅係佢主畫面
+rail 嗰層收幾多，唔係呢一頁畫得落幾多行。
 
 **Cache 策略：** 搵到嘅歌詞永久保留（歌詞唔會變）；LRCLIB 明確答「冇」就記 7 日
 （畀佢有機會之後補上）；**網絡失敗／伺服器繁忙唔會寫 cache** —— 呢點好重要，
@@ -236,5 +245,7 @@ LyricsBrowserService (車機)  +  MainActivity (手機)
 - **只支援有時間戳嘅歌詞。** LRCLIB 只有純文字歌詞嗰啲歌會當搵唔到處理 ——
   喺車機顯示一大段唔會郁嘅文字反而係視覺干擾。
 - **多個播放器同時開住**嘅時候，app 揀 active session 列表第一個，可能唔係你估嗰個。
-- 搵唔到歌詞 / 網絡唔通嗰陣，車機只顯示歌名同歌手，**唔會出 error 或者 retry 掣** ——
-  行車時閃動嘅文字係安全問題，而且司機都做唔到啲咩。
+- 搵唔到歌詞 / 網絡唔通嗰陣，車機喺歌曲資訊下面出一行靜態文字講明係邊一種情況
+  （「搵緊歌詞…」／「搵唔到呢首歌嘅同步歌詞」／「連唔到歌詞伺服器，等陣再試」），
+  但**唔會出 error dialog 或者 retry 掣** —— 行車時閃動嘅文字係安全問題，而且司機
+  都做唔到啲咩。手機同車機講同一句（`LyricsStatus.message()`）。

@@ -34,8 +34,8 @@ class LyricsBrowserService : MediaBrowserServiceCompat() {
     private lateinit var mediaSession: MediaSessionCompat
     private lateinit var feed: LyricsFeed
 
-    /** Host 喺 onGetRoot 講低最多收幾多行 —— 見嗰度嘅註釋。 */
-    private var rootChildrenLimit = WINDOW_SIZE
+    /** Host 喺 onGetRoot 報嘅行數 —— 點樣用，見 rowBudget()。 */
+    private var rootChildrenLimit = DEFAULT_ROOT_CHILDREN_LIMIT
 
     override fun onCreate() {
         super.onCreate()
@@ -85,12 +85,12 @@ class LyricsBrowserService : MediaBrowserServiceCompat() {
         // 讀到你播緊咩同埋當前歌詞。回 null = 拒絕連接。
         if (!CallerValidator.isAllowed(this, clientPackageName, clientUid)) return null
 
-        // Host 喺 rootHints 講低佢想點畫 root 呢一層。只跟 limit 一項：
-        // 出多過佢就會截走尾嗰幾行，而當前歌詞好可能就喺入面。
+        // Host 喺 rootHints 講低佢想點畫 root 呢一層。只讀 limit 一項，而且
+        // 當佢係下限唔係上限 —— 點解咁，見 rowBudget()。
         rootChildrenLimit = rootHints
-            ?.getInt(KEY_ROOT_CHILDREN_LIMIT, WINDOW_SIZE)
+            ?.getInt(KEY_ROOT_CHILDREN_LIMIT, DEFAULT_ROOT_CHILDREN_LIMIT)
             ?.takeIf { it > 0 }
-            ?: WINDOW_SIZE
+            ?: DEFAULT_ROOT_CHILDREN_LIMIT
 
         // ⚠️ 另一條 hint KEY_ROOT_CHILDREN_SUPPORTED_FLAGS 傳 1（BROWSABLE），
         // 但實測過唔好跟：
@@ -133,7 +133,7 @@ class LyricsBrowserService : MediaBrowserServiceCompat() {
         result: Result<MutableList<MediaBrowserCompat.MediaItem>>
     ) {
         // 淨係 root 有內容。冇呢個 guard 嘅話，任何 parentId 都會攞到同一份
-        // 歌詞 —— 即係每一行入面又有四行，一棵無限深嘅樹。用 PLAYABLE 之後
+        // 歌詞 —— 即係每一行入面又有成個窗口，一棵無限深嘅樹。用 PLAYABLE 之後
         // host 唔會再問，但佢問唔問係佢話事，唔應該靠佢自律。
         if (parentId != ROOT_ID) {
             Log.i(TAG, "onLoadChildren parent=$parentId → 冇下一層")
@@ -141,33 +141,33 @@ class LyricsBrowserService : MediaBrowserServiceCompat() {
             return
         }
 
-        val window = rootChildrenLimit
-        val items = mutableListOf<MediaBrowserCompat.MediaItem>()
-        val state = feed.state.value
-        val playing = state.nowPlaying
+        val budget = rowBudget()
+        val items = BrowseRows.build(feed.state.value, budget)
+            .map { textItem(it.id, it.title, it.subtitle) }
+            .toMutableList()
 
-        if (playing == null) {
-            items.add(textItem("no_media", "冇偵測到播放中嘅音樂"))
-        } else if (state.lyrics == null || state.lyrics.isEmpty) {
-            // 靜靜降級：搵唔到 / 未查完 / 網絡唔通，一律顯示歌名歌手，唔出 error。
-            // 行車時閃動嘅錯誤訊息係安全問題，而且司機都做唔到啲咩。
-            items.add(textItem("track", playing.title, playing.artist))
-        } else {
-            feed.window(window).forEach { (index, text) ->
-                val display = text.ifBlank { " " }
-                items.add(
-                    textItem(
-                        id = "line_$index",
-                        title = if (index == state.currentLine) "▶ $display" else display,
-                    )
-                )
-            }
-        }
-
-        Log.i(TAG, "onLoadChildren parent=$parentId → ${items.size} item(s)")
+        Log.i(TAG, "onLoadChildren parent=$parentId → ${items.size} item(s) " +
+            "(budget=$budget limit=$rootChildrenLimit)")
 
         result.sendResult(items)
     }
+
+    /**
+     * 一屏出幾多行。
+     *
+     * Host 報嘅 `KEY_ROOT_CHILDREN_LIMIT` **當下限，唔當上限**。v0.2.3 實機（車機
+     * 螢幕）試出嚟：跟足佢報嘅數目出，畫面下面吊住一大片空白 —— 嗰條 limit 講嘅
+     * 係佢主畫面 rail 嗰層收幾多，唔係呢一頁畫得落幾多行。所以照出 [DESIRED_ROWS]
+     * 行；就算真係畀 host 由尾截走，[BrowseRows] 排嘅次序令截走嘅一定係最後嗰幾句
+     * 預告，當前句梗係仲喺度。
+     *
+     * Host 報得多過我哋想要（大螢幕）就跟佢，去到 [MAX_ROWS] 為止 —— 再多就變咗
+     * 出成首歌詞，行車時滾唔停，而且每次 notify 都要重畫成堆。
+     *
+     * 落車之後 `adb logcat -s AutoLyricsBrowser` 見到 `budget=` 同 `limit=`，
+     * 就知車機真係收咗幾多行。
+     */
+    private fun rowBudget(): Int = rootChildrenLimit.coerceIn(DESIRED_ROWS, MAX_ROWS)
 
     private fun textItem(
         id: String,
@@ -190,8 +190,14 @@ class LyricsBrowserService : MediaBrowserServiceCompat() {
 
         const val ROOT_ID = "root"
 
-        /** Host 冇講 limit 嗰陣先用 —— 實際上 Android Auto 一定會講。 */
-        const val WINDOW_SIZE = 4
+        /** Host 冇報 limit 嗰陣先用 —— 實際上 Android Auto 一定會報。 */
+        const val DEFAULT_ROOT_CHILDREN_LIMIT = 4
+
+        /** 想出幾多行：1 行歌曲資訊 + 6 行歌詞。 */
+        const val DESIRED_ROWS = 7
+
+        /** Host 報得幾多都好，最多出到咁多行。 */
+        const val MAX_ROWS = 10
 
         // Host 喺 rootHints 用嘅 key。androidx.media 冇出 constant，
         // 要自己寫死。

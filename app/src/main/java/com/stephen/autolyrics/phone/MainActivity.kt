@@ -30,6 +30,8 @@ import com.stephen.autolyrics.car.CarConnectionState
 import com.stephen.autolyrics.car.CarLink
 import com.stephen.autolyrics.lyrics.LyricsFeed
 import com.stephen.autolyrics.lyrics.LyricsFeedState
+import com.stephen.autolyrics.lyrics.LyricsStatus
+import com.stephen.autolyrics.lyrics.message
 import com.stephen.autolyrics.media.NotificationMediaWatcher
 import kotlinx.coroutines.flow.MutableStateFlow
 
@@ -188,12 +190,13 @@ private fun LyricsPane(state: LyricsFeedState) {
 
         val lyrics = state.lyrics
         when {
-            state.loading -> Text("搵緊歌詞…", style = MaterialTheme.typography.bodyMedium)
-
+            // 同車機講同一句 —— 手機見到「搵唔到」，車機就唔會靜靜咁淨係得個歌名。
             lyrics == null || lyrics.isEmpty -> Text(
-                "搵唔到呢首歌嘅同步歌詞。",
+                state.status.message(),
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = if (state.status == LyricsStatus.ERROR)
+                    MaterialTheme.colorScheme.error
+                else MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
             else -> {
