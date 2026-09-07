@@ -20,8 +20,7 @@ data class BrowseRow(
  *
  * ## 排序 = 截走都唔痛
  *
- * Host 可能會將我哋出嘅行截短（見 [LyricsBrowserService.rowBudget]）。所以砌嘅
- * 次序係按重要性嚟排：
+ * Host 可能會將我哋出嘅行截短（見 [budget]）。所以砌嘅次序係按重要性嚟排：
  *
  *   1. 歌曲資訊（歌名 + 歌手）
  *   2. 前一句
@@ -82,9 +81,51 @@ object BrowseRows {
         return (start until end).map { it to lines[it].text.ifBlank { "♪" } }
     }
 
+    /**
+     * 一屏出幾多行（連歌曲資訊嗰行）。
+     *
+     * MediaBrowserService 冇任何 callback 話返畀我哋知 host 實際畫咗幾多行 ——
+     * 送咗出去就冇下文。所以呢度得兩個來源：
+     *
+     * - [override]：校準模式度出嚟嘅數（見 [ruler]）。有嘅話行先，因為佢係
+     *   真係喺嗰部車機上面數過嘅。
+     * - Host 喺 rootHints 報嘅 `KEY_ROOT_CHILDREN_LIMIT`。**當下限唔當上限** ——
+     *   v0.2.3 實機試過跟足佢報嘅數目出，畫面下面吊住一大片空白，即係嗰條
+     *   limit 講嘅係佢主畫面 rail 嗰層收幾多，唔係呢一頁畫得落幾多行。
+     */
+    fun budget(hostLimit: Int, override: Int?): Int =
+        override?.coerceIn(MIN_ROWS, MAX_ROWS)
+            ?: hostLimit.coerceIn(DESIRED_ROWS, MAX_ROWS)
+
+    /**
+     * 校準模式：喺車機出一把間尺 `01`、`02`、`03`…
+     *
+     * 數到車機顯示到最後一行係邊個號碼，嗰個號碼就係佢一屏容得落幾多行 ——
+     * 唔理係螢幕唔夠高、host 截短、定係字太大撐開咗，量到嘅都係最終結果。
+     * 之後喺手機入返個數落設定，就真係「顯示到幾多行就出幾多行」。
+     */
+    fun ruler(count: Int = MAX_ROWS): List<BrowseRow> =
+        (1..count.coerceIn(1, MAX_ROWS)).map { n ->
+            val label = if (n < 10) "0$n" else "$n"
+            BrowseRow(
+                id = "ruler_$n",
+                title = "$label ──── 校準中",
+                // 第一行同真正嘅歌曲資訊行一樣有副標題。有啲 host 將有副標題嘅
+                // item 畫高啲，間尺唔跟住嚟就會量多咗一行。
+                subtitle = if (n == 1) "數到最後見到嘅號碼，入返落手機" else null,
+            )
+        }
+
     const val ID_NO_MEDIA = "no_media"
     const val ID_TRACK = "track"
     const val ID_STATUS = "status"
+
+    /** 冇校準過嗰陣出幾多行：1 行歌曲資訊 + 6 行歌詞。 */
+    const val DESIRED_ROWS = 7
+
+    /** 校準到最少／最多幾多行。間尺亦係出到 [MAX_ROWS] 行為止。 */
+    const val MIN_ROWS = 2
+    const val MAX_ROWS = 12
 
     /** 當前句上面留返幾多句做上文。 */
     private const val LEAD_IN = 1

@@ -1,5 +1,6 @@
 package com.stephen.autolyrics.auto
 
+import android.content.SharedPreferences
 import android.os.Bundle
 import android.support.v4.media.MediaBrowserCompat
 import android.support.v4.media.MediaDescriptionCompat
@@ -33,15 +34,29 @@ class LyricsBrowserService : MediaBrowserServiceCompat() {
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private lateinit var mediaSession: MediaSessionCompat
     private lateinit var feed: LyricsFeed
+    private lateinit var carRows: CarRowSettings
 
-    /** Host 喺 onGetRoot 報嘅行數 —— 點樣用，見 rowBudget()。 */
+    /** Host 喺 onGetRoot 報嘅行數 —— 點樣用，見 [BrowseRows.budget]。 */
     private var rootChildrenLimit = DEFAULT_ROOT_CHILDREN_LIMIT
+
+    /**
+     * 喺手機改咗行數／開咗校準，車機即刻跟住變 —— 唔使拔線重連。
+     *
+     * 一定要擺喺 field：SharedPreferences 只 hold weak reference。
+     * scope 係 Dispatchers.Main，所以 notifyChildrenChanged 一定喺 main thread 行。
+     */
+    private val settingsListener =
+        SharedPreferences.OnSharedPreferenceChangeListener { _, _ ->
+            scope.launch { notifyChildrenChanged(ROOT_ID) }
+        }
 
     override fun onCreate() {
         super.onCreate()
 
         // 同手機畫面共用同一份邏輯 —— 手機見到咩，車機就顯示咩。
         feed = LyricsFeed(applicationContext, scope).also { it.start() }
+
+        carRows = CarRowSettings(this).also { it.register(settingsListener) }
 
         // 淨係用嚟畀 host 知有個 session 喺度 —— 冇 setCallback()，即係唔接
         // play / pause / seek。呢個 app 讀其他播放器嘅狀態，唔控制播放。
@@ -69,6 +84,7 @@ class LyricsBrowserService : MediaBrowserServiceCompat() {
     }
 
     override fun onDestroy() {
+        carRows.unregister(settingsListener)
         scope.cancel()
         mediaSession.isActive = false
         mediaSession.release()
@@ -86,7 +102,7 @@ class LyricsBrowserService : MediaBrowserServiceCompat() {
         if (!CallerValidator.isAllowed(this, clientPackageName, clientUid)) return null
 
         // Host 喺 rootHints 講低佢想點畫 root 呢一層。只讀 limit 一項，而且
-        // 當佢係下限唔係上限 —— 點解咁，見 rowBudget()。
+        // 當佢係下限唔係上限 —— 點解咁，見 BrowseRows.budget()。
         rootChildrenLimit = rootHints
             ?.getInt(KEY_ROOT_CHILDREN_LIMIT, DEFAULT_ROOT_CHILDREN_LIMIT)
             ?.takeIf { it > 0 }
@@ -141,33 +157,25 @@ class LyricsBrowserService : MediaBrowserServiceCompat() {
             return
         }
 
-        val budget = rowBudget()
-        val items = BrowseRows.build(feed.state.value, budget)
-            .map { textItem(it.id, it.title, it.subtitle) }
-            .toMutableList()
+        // 校準模式出間尺，唔出歌詞 —— 目的就係喺車機上面數，所以一定要出到
+        // 我哋容許嘅上限，先睇得出佢究竟喺邊行斷。
+        val override = carRows.rows
+        val budget = BrowseRows.budget(rootChildrenLimit, override)
+        val rows =
+            if (carRows.calibrating) BrowseRows.ruler()
+            else BrowseRows.build(feed.state.value, budget)
 
+        val items = rows.map { textItem(it.id, it.title, it.subtitle) }.toMutableList()
+
+        // `adb logcat -s AutoLyricsBrowser` 見到呢行，就知我哋送咗幾多行出去、
+        // host 報幾多、用緊校準值定自動值。（車機實際畫咗幾多行冇得由呢度知 ——
+        // 要開校準模式喺螢幕上面數，見 BrowseRows.ruler()。）
         Log.i(TAG, "onLoadChildren parent=$parentId → ${items.size} item(s) " +
-            "(budget=$budget limit=$rootChildrenLimit)")
+            "(budget=$budget limit=$rootChildrenLimit override=$override " +
+            "calibrating=${carRows.calibrating})")
 
         result.sendResult(items)
     }
-
-    /**
-     * 一屏出幾多行。
-     *
-     * Host 報嘅 `KEY_ROOT_CHILDREN_LIMIT` **當下限，唔當上限**。v0.2.3 實機（車機
-     * 螢幕）試出嚟：跟足佢報嘅數目出，畫面下面吊住一大片空白 —— 嗰條 limit 講嘅
-     * 係佢主畫面 rail 嗰層收幾多，唔係呢一頁畫得落幾多行。所以照出 [DESIRED_ROWS]
-     * 行；就算真係畀 host 由尾截走，[BrowseRows] 排嘅次序令截走嘅一定係最後嗰幾句
-     * 預告，當前句梗係仲喺度。
-     *
-     * Host 報得多過我哋想要（大螢幕）就跟佢，去到 [MAX_ROWS] 為止 —— 再多就變咗
-     * 出成首歌詞，行車時滾唔停，而且每次 notify 都要重畫成堆。
-     *
-     * 落車之後 `adb logcat -s AutoLyricsBrowser` 見到 `budget=` 同 `limit=`，
-     * 就知車機真係收咗幾多行。
-     */
-    private fun rowBudget(): Int = rootChildrenLimit.coerceIn(DESIRED_ROWS, MAX_ROWS)
 
     private fun textItem(
         id: String,
@@ -192,12 +200,6 @@ class LyricsBrowserService : MediaBrowserServiceCompat() {
 
         /** Host 冇報 limit 嗰陣先用 —— 實際上 Android Auto 一定會報。 */
         const val DEFAULT_ROOT_CHILDREN_LIMIT = 4
-
-        /** 想出幾多行：1 行歌曲資訊 + 6 行歌詞。 */
-        const val DESIRED_ROWS = 7
-
-        /** Host 報得幾多都好，最多出到咁多行。 */
-        const val MAX_ROWS = 10
 
         // Host 喺 rootHints 用嘅 key。androidx.media 冇出 constant，
         // 要自己寫死。

@@ -26,6 +26,8 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.launch
 import com.stephen.autolyrics.AppGraph
+import com.stephen.autolyrics.auto.BrowseRows
+import com.stephen.autolyrics.auto.CarRowSettings
 import com.stephen.autolyrics.car.CarConnectionState
 import com.stephen.autolyrics.car.CarLink
 import com.stephen.autolyrics.lyrics.LyricsFeed
@@ -38,12 +40,14 @@ import kotlinx.coroutines.flow.MutableStateFlow
 class MainActivity : ComponentActivity() {
 
     private lateinit var feed: LyricsFeed
+    private lateinit var carRows: CarRowSettings
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         // 手機畫面自己查歌詞，唔再淨係靠車機嗰邊發起。
         feed = LyricsFeed(applicationContext, lifecycleScope).also { it.start() }
+        carRows = CarRowSettings(this)
 
         val carLink = MutableStateFlow(CarLink.DISCONNECTED)
         lifecycleScope.launch {
@@ -58,6 +62,12 @@ class MainActivity : ComponentActivity() {
                 Surface(modifier = Modifier.fillMaxSize()) {
                     val state by feed.state.collectAsStateWithLifecycle()
                     val link by carLink.collectAsStateWithLifecycle()
+
+                    // 呢兩個 state 就係 SharedPreferences 嘅鏡 —— 寫落 prefs 之後
+                    // 順手更新，畫面即刻跟住郁；車機嗰邊靠 change listener 收到。
+                    var rows by remember { mutableStateOf(carRows.rows) }
+                    var calibrating by remember { mutableStateOf(carRows.calibrating) }
+
                     HomeScreen(
                         state = state,
                         carLink = link,
@@ -65,6 +75,10 @@ class MainActivity : ComponentActivity() {
                         onOpenSettings = {
                             startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
                         },
+                        carRows = rows,
+                        calibrating = calibrating,
+                        onCarRowsChange = { carRows.rows = it; rows = carRows.rows },
+                        onCalibratingChange = { carRows.calibrating = it; calibrating = it },
                     )
                 }
             }
@@ -87,6 +101,10 @@ private fun HomeScreen(
     carLink: CarLink,
     isListenerEnabled: () -> Boolean,
     onOpenSettings: () -> Unit,
+    carRows: Int?,
+    calibrating: Boolean,
+    onCarRowsChange: (Int?) -> Unit,
+    onCalibratingChange: (Boolean) -> Unit,
 ) {
     var granted by remember { mutableStateOf(isListenerEnabled()) }
 
@@ -134,6 +152,14 @@ private fun HomeScreen(
         }
 
         LyricsPane(state)
+
+        Spacer(Modifier.height(24.dp))
+        CarRowsCard(
+            rows = carRows,
+            calibrating = calibrating,
+            onRowsChange = onCarRowsChange,
+            onCalibratingChange = onCalibratingChange,
+        )
 
         Spacer(Modifier.height(24.dp))
         QueryLogSection()
@@ -222,6 +248,94 @@ private fun LyricsPane(state: LyricsFeedState) {
         }
     }
 }
+
+/**
+ * 車機一屏出幾多行 —— 連埋校準模式。
+ *
+ * 點解要人手校準：MediaBrowserService 冇 callback 話返畀我哋知 host 實際畫咗
+ * 幾多行，送咗出去就冇下文。所以唯一問到真相嘅方法，就係喺車機出一把間尺，
+ * 落車前望一眼數到邊行，入返個數落嚟。度一次，之後就啱。
+ */
+@Composable
+private fun CarRowsCard(
+    rows: Int?,
+    calibrating: Boolean,
+    onRowsChange: (Int?) -> Unit,
+    onCalibratingChange: (Boolean) -> Unit,
+) {
+    Card {
+        Column(Modifier.padding(16.dp)) {
+            Text("車機一屏行數", style = MaterialTheme.typography.titleMedium)
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "包含第一行歌曲資訊，其餘係歌詞。",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
+            Spacer(Modifier.height(12.dp))
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                OutlinedButton(
+                    onClick = { onRowsChange(stepRows(rows, -1)) },
+                    enabled = (rows ?: BrowseRows.DESIRED_ROWS) > BrowseRows.MIN_ROWS,
+                ) { Text("−") }
+
+                Text(
+                    rows?.let { "$it 行" } ?: "自動（${BrowseRows.DESIRED_ROWS} 行）",
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                )
+
+                OutlinedButton(
+                    onClick = { onRowsChange(stepRows(rows, +1)) },
+                    enabled = (rows ?: BrowseRows.DESIRED_ROWS) < BrowseRows.MAX_ROWS,
+                ) { Text("+") }
+
+                Spacer(Modifier.weight(1f))
+
+                TextButton(onClick = { onRowsChange(null) }, enabled = rows != null) {
+                    Text("回自動")
+                }
+            }
+
+            Spacer(Modifier.height(16.dp))
+            HorizontalDivider()
+            Spacer(Modifier.height(16.dp))
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("校準模式", style = MaterialTheme.typography.bodyLarge)
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "開咗之後車機唔出歌詞，改為出「01、02、03…」一把間尺" +
+                            "（最多 ${BrowseRows.MAX_ROWS} 行）。停低車望一眼，" +
+                            "顯示到最後一行係邊個號碼，就將上面調做嗰個數 —— " +
+                            "之後就顯示到幾多行出幾多行。校準完記住閂返。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Spacer(Modifier.width(12.dp))
+                Switch(checked = calibrating, onCheckedChange = onCalibratingChange)
+            }
+
+            if (calibrating) {
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    "⚠️ 校準模式開緊 —— 車機而家出緊間尺，唔會顯示歌詞。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
+        }
+    }
+}
+
+/** null（自動）當 [BrowseRows.DESIRED_ROWS] 咁計，加減完夾返喺合法範圍。 */
+private fun stepRows(rows: Int?, delta: Int): Int =
+    ((rows ?: BrowseRows.DESIRED_ROWS) + delta)
+        .coerceIn(BrowseRows.MIN_ROWS, BrowseRows.MAX_ROWS)
 
 @Composable
 private fun QueryLogSection() {

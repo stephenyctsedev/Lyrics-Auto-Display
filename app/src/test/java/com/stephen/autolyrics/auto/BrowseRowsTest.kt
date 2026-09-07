@@ -132,6 +132,57 @@ class BrowseRowsTest {
         assertEquals(listOf(BrowseRows.ID_TRACK, BrowseRows.ID_STATUS), rows.map { it.id })
     }
 
+    // --- budget(): host 報嘅數當下限，校準值行先 ---
+
+    @Test
+    fun `ignores a host limit smaller than what the screen fits`() {
+        // 實機報 4，但畫面容得落 7 —— 唔可以跟足 4，否則下面吊空。
+        assertEquals(7, BrowseRows.budget(hostLimit = 4, override = null))
+    }
+
+    @Test
+    fun `follows a host limit bigger than the default`() {
+        assertEquals(9, BrowseRows.budget(hostLimit = 9, override = null))
+    }
+
+    @Test
+    fun `caps the host limit`() {
+        assertEquals(BrowseRows.MAX_ROWS, BrowseRows.budget(hostLimit = 99, override = null))
+    }
+
+    @Test
+    fun `a calibrated value wins over the host limit`() {
+        assertEquals(5, BrowseRows.budget(hostLimit = 4, override = 5))
+        assertEquals(5, BrowseRows.budget(hostLimit = 99, override = 5))
+    }
+
+    @Test
+    fun `clamps a calibrated value into range`() {
+        assertEquals(BrowseRows.MIN_ROWS, BrowseRows.budget(hostLimit = 4, override = 0))
+        assertEquals(BrowseRows.MAX_ROWS, BrowseRows.budget(hostLimit = 4, override = 99))
+    }
+
+    // --- ruler(): 校準模式喺車機出嘅間尺 ---
+
+    @Test
+    fun `the ruler is numbered from one so the last visible row reads as the count`() {
+        val ruler = BrowseRows.ruler()
+        assertEquals(BrowseRows.MAX_ROWS, ruler.size)
+        assertTrue(ruler[0].title.startsWith("01"))
+        assertTrue(ruler[6].title.startsWith("07"))
+        assertTrue(ruler.last().title.startsWith("${BrowseRows.MAX_ROWS}"))
+        // 間尺要同真正嘅版面一樣高先量得準：第一行同歌曲資訊行一樣有副標題，
+        // 其餘同歌詞行一樣淨係得標題。
+        assertTrue(ruler[0].subtitle != null)
+        assertTrue(ruler.drop(1).all { it.subtitle == null })
+    }
+
+    @Test
+    fun `the ruler never exceeds what we would ever send`() {
+        assertEquals(BrowseRows.MAX_ROWS, BrowseRows.ruler(99).size)
+        assertEquals(1, BrowseRows.ruler(0).size)
+    }
+
     @Test
     fun `never exceeds the budget`() {
         assertEquals(3, BrowseRows.build(playingState(lyricsOf(20), currentLine = 5), 3).size)
