@@ -21,8 +21,11 @@ data class LyricsFeedState(
     val nowPlaying: PlaybackState? = null,
     val lyrics: ParsedLyrics? = null,
     val currentLine: Int? = null,
-    /** 查緊歌詞（用嚟喺手機畫面顯示「搵緊…」，車機唔會用）。 */
-    val loading: Boolean = false,
+    /**
+     * 查歌詞查成點。手機同車機都會讀 —— 兩邊都要講得出「查緊」同
+     * 「查完，冇」嘅分別，唔係就淨係見到個歌名喺度，唔知發生咩事。
+     */
+    val status: LyricsStatus = LyricsStatus.IDLE,
 )
 
 /**
@@ -54,7 +57,7 @@ class LyricsFeed(
                 if (changed) {
                     mutable.value = LyricsFeedState(
                         nowPlaying = playback,
-                        loading = playback != null,
+                        status = if (playback != null) LyricsStatus.LOADING else LyricsStatus.IDLE,
                     )
                     if (playback != null) startLookup(playback)
                 } else {
@@ -90,26 +93,19 @@ class LyricsFeed(
             ) {
                 return@launch
             }
+            // 空歌詞當搵唔到 —— 咁 FOUND 就恆常代表「真係有嘢畫得出」，
+            // 顯示嗰邊唔使再自己分多次。
+            val found = (result as? LyricsResult.Found)?.lyrics?.takeIf { !it.isEmpty }
             mutable.value = cur.copy(
-                lyrics = (result as? LyricsResult.Found)?.lyrics,
+                lyrics = found,
                 currentLine = null,
-                loading = false,
+                status = when {
+                    found != null -> LyricsStatus.FOUND
+                    result is LyricsResult.Error -> LyricsStatus.ERROR
+                    else -> LyricsStatus.NOT_FOUND
+                },
             )
         }
-    }
-
-    /**
-     * 一般情況：前一句 + 當前句 + 後兩句。
-     * 首句附近（currentLine 為 0 或 null）冇「前一句」可以顯示，
-     * 窗口會夾到 0 開始，變成當前句 + 後三句。
-     */
-    fun window(size: Int): List<Pair<Int, String>> {
-        val s = mutable.value
-        val lines = s.lyrics?.lines ?: return emptyList()
-        val current = s.currentLine ?: 0
-        val start = (current - 1).coerceAtLeast(0)
-        val end = (start + size).coerceAtMost(lines.size)
-        return (start until end).map { it to lines[it].text }
     }
 
     private companion object {
